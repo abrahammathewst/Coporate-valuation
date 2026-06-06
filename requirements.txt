@@ -1,0 +1,11 @@
+python-dotenv
+
+pymupdf
+langchain-community
+
+langchain-google-genai
+langchain-experimental
+
+sentence-transformers
+
+qdrant_client
