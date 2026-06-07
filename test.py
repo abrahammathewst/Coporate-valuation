@@ -1,41 +1,17 @@
-from app.retrieval.retriever import search
+from app.rag.chain import answer_question
 
 
 def main():
 
     query = "What was EBITDA growth?"
 
-    results = search(
-        query=query,
-        limit=5
-    )
+    result = answer_question(query)
 
-    print(f"\nQuery: {query}")
-    print(f"Retrieved: {len(results)} chunks\n")
+    print("\nQUESTION\n")
+    print(query)
 
-    for rank, result in enumerate(results, start=1):
-
-        payload = result.payload
-
-        chunk_id = payload.get("chunk_id")
-        doc_id = payload.get("doc_id")
-        page = payload.get("page")
-        source = payload.get("source")
-
-        print("=" * 100)
-
-        print(f"Rank     : {rank}")
-        print(f"Score    : {result.score:.4f}")
-        print(f"Chunk ID : {chunk_id}")
-        print(f"Doc ID   : {doc_id}")
-        print(f"Page     : {page}")
-        print(f"Source   : {source}")
-
-        print("\nChunk:\n")
-
-        print(payload.get("text", "")[:1000])
-
-        print("\n")
+    print("\nANSWER\n")
+    print(result["answer"])
 
 
 if __name__ == "__main__":

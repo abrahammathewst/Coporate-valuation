@@ -35,4 +35,17 @@ docker run -d `
 docker ps
 ```
 
+## 5. Setup Ollama
+```sh
+ollama --version
+ollama pull qwen3:8b
+ollama run qwen3:8b
+ollama stop qwen3:8b
+
+## 6. Run benchmark
+```sh
+python -m tests.benchmark
+code tests\benchmark_results_ollama\benchmark_results.json
+```
+
 
