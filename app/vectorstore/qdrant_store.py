@@ -10,7 +10,7 @@ from qdrant_client.models import (
 from app.embeddings.hf_embeddings import get_embedding_model
 
 
-COLLECTION_NAME = "corporate_reports"
+COLLECTION_NAME = "financial_documents"
 VECTOR_SIZE = 1024
 
 
@@ -32,7 +32,9 @@ def create_collection():
     ]
 
     if COLLECTION_NAME in existing_collections:
-        print(f"Collection '{COLLECTION_NAME}' already exists")
+        print(
+            f"Collection '{COLLECTION_NAME}' already exists"
+        )
         return
 
     client.create_collection(
@@ -43,7 +45,9 @@ def create_collection():
         )
     )
 
-    print(f"Collection '{COLLECTION_NAME}' created")
+    print(
+        f"Collection '{COLLECTION_NAME}' created"
+    )
 
 
 def recreate_collection():
@@ -51,17 +55,25 @@ def recreate_collection():
     client = get_qdrant_client()
 
     try:
+
         client.delete_collection(
             collection_name=COLLECTION_NAME
         )
-        print(f"Deleted '{COLLECTION_NAME}'")
+
+        print(
+            f"Deleted '{COLLECTION_NAME}'"
+        )
+
     except Exception:
         pass
 
     create_collection()
 
 
-def upload_chunks(chunks):
+def upload_chunks(
+    chunks,
+    metadata
+):
 
     client = get_qdrant_client()
 
@@ -72,7 +84,10 @@ def upload_chunks(chunks):
         for chunk in chunks
     ]
 
-    print(f"Generating embeddings for {len(texts)} chunks...")
+    print(
+        f"Generating embeddings for "
+        f"{len(texts)} chunks..."
+    )
 
     embeddings = model.encode(
         texts,
@@ -88,10 +103,19 @@ def upload_chunks(chunks):
     ):
 
         payload = {
+
+            # document metadata
+            "ticker": metadata["ticker"],
+            "year": metadata["year"],
+            "document_type": metadata["document_type"],
+            "source_file": metadata["source_file"],
+
+            # chunk metadata
             "chunk_id": idx,
-            "doc_id": "ril_annual_report_2025_26",
             "page": chunk.metadata.get("page"),
             "source": chunk.metadata.get("source"),
+
+            # content
             "text": chunk.page_content
         }
 
@@ -111,15 +135,15 @@ def upload_chunks(chunks):
         wait=True
     )
 
-    print(f"Uploaded {len(points)} chunks successfully")
+    print(
+        f"Uploaded {len(points)} chunks successfully"
+    )
 
 
 def get_collection_info():
 
     client = get_qdrant_client()
 
-    info = client.get_collection(
+    return client.get_collection(
         collection_name=COLLECTION_NAME
     )
-
-    return info

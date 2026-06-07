@@ -33,6 +33,12 @@ docker run -d `
 
 # Check in http://localhost:6333/dashboard
 docker ps
+
+# start
+docker start qdrant
+
+# stop
+docker stop qdrant
 ```
 
 ## 5. Setup Ollama

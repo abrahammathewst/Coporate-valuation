@@ -1,13 +1,12 @@
-from app.ingestion.pipeline import ingest_pdf
+from app.ingestion.pipeline import ingest_directory
 
 
 def main():
 
-    pdf_path = "./data/RIL-Integrated-Annual-Report-2025-26.pdf"
-
-    chunks = ingest_pdf(pdf_path)
-
-    print(f"\nFinal chunks stored: {len(chunks)}")
+    ingest_directory(
+        directory_path="./data/annual_report",
+        recreate=True
+    )
 
 
 if __name__ == "__main__":

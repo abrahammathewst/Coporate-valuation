@@ -1,235 +1,336 @@
-from playwright.sync_api import sync_playwright
 from pathlib import Path
-import requests
+
 import pandas as pd
+import requests
 
-YEAR = "2025"
+from playwright.sync_api import sync_playwright
 
-df = pd.read_csv("./data/ind_nifty500list.csv")
 
-output_dir = Path("./data/annual_report")
-output_dir.mkdir(parents=True, exist_ok=True)
+CSV_FILE = "./data/ind_company_list.csv"
+
+OUTPUT_DIR = Path("./data/annual_report")
+
+OUTPUT_DIR.mkdir(
+    parents=True,
+    exist_ok=True
+)
 
 failures = []
 
-for _, row in df.iterrows():
 
-    COMPANY = row["ISIN Code"]      # Search value
-    SYMBOL = row["Symbol"]          # Filename
+def clean_company_name(name: str):
 
-    browser = None
+    return (
+        str(name)
+        .upper()
+        .replace(".", "")
+        .replace("/", "_")
+        .strip()
+    )
+
+
+def download_company_reports(
+    page,
+    isin: str,
+    company_name: str
+):
 
     try:
 
-        with sync_playwright() as p:
+        page.goto(
+            "https://www.bseindia.com/corporates/historicalannualreport"
+        )
 
-            browser = p.chromium.launch(headless=False)
+        page.wait_for_timeout(3000)
 
-            page = browser.new_page()
+        search_box = page.locator(
+            "main #scripsearchtxtbx"
+        )
 
-            page.goto(
-                "https://www.bseindia.com/corporates/historicalannualreport"
+        search_box.fill(isin)
+
+        page.wait_for_timeout(3000)
+
+        try:
+
+            page.get_by_text(
+                isin
+            ).first.click()
+
+        except Exception:
+
+            page.keyboard.press(
+                "ArrowDown"
             )
 
-            page.wait_for_timeout(3000)
+            page.keyboard.press(
+                "Enter"
+            )
 
-            # Search company using ISIN
-            box = page.locator("main #scripsearchtxtbx")
+        page.wait_for_timeout(1000)
 
-            box.fill(COMPANY)
+        page.get_by_role(
+            "button",
+            name="Submit"
+        ).click()
 
-            page.wait_for_timeout(3000)
+        page.wait_for_selector(
+            "table",
+            timeout=15000
+        )
 
-            # Select autocomplete result
+        rows = page.locator(
+            "table tbody tr"
+        )
+
+        print(
+            f"\n{company_name}: "
+            f"{rows.count()} reports found"
+        )
+
+        for i in range(rows.count()):
+
             try:
-                page.get_by_text(COMPANY).first.click()
-            except:
-                page.keyboard.press("ArrowDown")
-                page.keyboard.press("Enter")
-
-            page.wait_for_timeout(1000)
-
-            # Submit
-            page.get_by_role(
-                "button",
-                name="Submit"
-            ).click()
-
-            page.wait_for_selector(
-                "table",
-                timeout=15000
-            )
-
-            rows = page.locator("table tbody tr")
-
-            pdf_url = None
-
-            for i in range(rows.count()):
 
                 report_row = rows.nth(i)
 
-                row_year = (
-                    report_row.locator("td")
+                year = (
+                    report_row
+                    .locator("td")
                     .nth(0)
                     .inner_text()
                     .strip()
                 )
 
-                print(
-                    f"{SYMBOL} -> YEAR {row_year}"
+                filename = (
+                    OUTPUT_DIR /
+                    f"{company_name}_{year}_Annual_Report.pdf"
                 )
 
-                if row_year == YEAR:
-
-                    icon = report_row.locator(
-                        "i[aria-label='Download pdf']"
-                    )
+                if filename.exists():
 
                     print(
-                        f"{SYMBOL} -> Found PDF"
+                        f"SKIPPED: "
+                        f"{filename.name}"
                     )
 
-                    icon.click(force=True)
+                    continue
 
-                    page.wait_for_timeout(5000)
+                print(
+                    f"{company_name} -> {year}"
+                )
 
-                    pdf_url = page.context.pages[-1].url
+                pages_before = len(
+                    page.context.pages
+                )
+
+                icon = report_row.locator(
+                    "i[aria-label='Download pdf']"
+                )
+
+                icon.click(force=True)
+
+                page.wait_for_timeout(
+                    5000
+                )
+
+                pages_after = len(
+                    page.context.pages
+                )
+
+                if pages_after <= pages_before:
 
                     print(
-                        f"{SYMBOL} -> {pdf_url}"
+                        f"{company_name} {year}: "
+                        f"No PDF page opened"
                     )
 
-                    break
+                    continue
 
-            if not pdf_url:
-
-                print(
-                    f"SKIPPED: {SYMBOL} "
-                    f"(No report for {YEAR})"
+                pdf_page = (
+                    page.context.pages[-1]
                 )
 
-                failures.append(
-                    (
-                        SYMBOL,
-                        "No report found"
-                    )
+                pdf_url = pdf_page.url
+
+                cookies = {
+                    c["name"]: c["value"]
+                    for c in page.context.cookies()
+                }
+
+                headers = {
+                    "User-Agent":
+                        "Mozilla/5.0 "
+                        "(Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 "
+                        "(KHTML, like Gecko) "
+                        "Chrome/120.0.0.0 "
+                        "Safari/537.36",
+                    "Referer":
+                        "https://www.bseindia.com/"
+                }
+
+                response = requests.get(
+                    pdf_url,
+                    headers=headers,
+                    cookies=cookies,
+                    timeout=120
                 )
 
-                continue
+                if response.status_code != 200:
 
-            cookies = {
-                c["name"]: c["value"]
-                for c in page.context.cookies()
-            }
-
-            headers = {
-                "User-Agent": (
-                    "Mozilla/5.0 "
-                    "(Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                ),
-                "Referer": (
-                    "https://www.bseindia.com/"
-                )
-            }
-
-            print(
-                f"{SYMBOL} -> Downloading..."
-            )
-
-            response = requests.get(
-                pdf_url,
-                headers=headers,
-                cookies=cookies,
-                timeout=120
-            )
-
-            if response.status_code != 200:
-
-                print(
-                    f"SKIPPED: {SYMBOL} "
-                    f"(HTTP {response.status_code})"
-                )
-
-                failures.append(
-                    (
-                        SYMBOL,
+                    print(
+                        f"{company_name} {year}: "
                         f"HTTP {response.status_code}"
                     )
+
+                    continue
+
+                with open(
+                    filename,
+                    "wb"
+                ) as f:
+
+                    f.write(
+                        response.content
+                    )
+
+                print(
+                    f"DOWNLOADED: "
+                    f"{filename.name}"
                 )
 
-                continue
+                try:
+                    pdf_page.close()
+                except Exception:
+                    pass
 
-            filename = (
-                output_dir /
-                f"{SYMBOL}_{YEAR}_Annual_Report.pdf"
-            )
+            except Exception as e:
 
-            with open(filename, "wb") as f:
-                f.write(response.content)
+                print(
+                    f"FAILED: "
+                    f"{company_name} {year}"
+                )
 
-            print(
-                f"SUCCESS: {filename.name}"
-            )
+                print(e)
 
     except Exception as e:
 
-        print(
-            f"FAILED: {SYMBOL}"
-        )
-
-        print(e)
-
         failures.append(
             (
-                SYMBOL,
+                company_name,
                 str(e)
             )
         )
 
-    finally:
+        print(
+            f"FAILED COMPANY: "
+            f"{company_name}"
+        )
+
+        print(e)
+
+
+def main():
+
+    df = pd.read_csv(
+        CSV_FILE
+    )
+
+    # TEST MODE
+    # df = df.head(3)
+
+    with sync_playwright() as p:
+
+        browser = p.chromium.launch(
+            headless=False
+        )
+
+        page = browser.new_page()
 
         try:
-            if browser:
-                browser.close()
-        except:
-            pass
 
-print("\n" + "=" * 80)
-print("SUMMARY")
-print("=" * 80)
+            total = len(df)
 
-print(
-    f"Total Companies: {len(df)}"
-)
+            for idx, row in enumerate(
+                df.iterrows(),
+                start=1
+            ):
 
-print(
-    f"Failures: {len(failures)}"
-)
+                _, row = row
 
-if failures:
+                isin = row["ISIN"]
 
-    failure_df = pd.DataFrame(
-        failures,
-        columns=["Symbol", "Reason"]
-    )
+                company_name = clean_company_name(
+                    row["NAME"]
+                )
 
-    failure_file = (
-        output_dir /
-        "download_failures.csv"
-    )
+                print(
+                    "\n"
+                    + "=" * 80
+                )
 
-    failure_df.to_csv(
-        failure_file,
-        index=False
+                print(
+                    f"[{idx}/{total}] "
+                    f"{company_name}"
+                )
+
+                download_company_reports(
+                    page=page,
+                    isin=isin,
+                    company_name=company_name
+                )
+
+        finally:
+
+            browser.close()
+
+    print(
+        "\n"
+        + "=" * 80
     )
 
     print(
-        f"Failure log saved to:"
+        "DOWNLOAD COMPLETE"
     )
 
     print(
-        failure_file.resolve()
+        "=" * 80
     )
+
+    print(
+        f"Failures: "
+        f"{len(failures)}"
+    )
+
+    if failures:
+
+        failure_df = pd.DataFrame(
+            failures,
+            columns=[
+                "Company",
+                "Reason"
+            ]
+        )
+
+        failure_file = (
+            OUTPUT_DIR /
+            "download_failures.csv"
+        )
+
+        failure_df.to_csv(
+            failure_file,
+            index=False
+        )
+
+        print(
+            f"Failure log saved to:"
+        )
+
+        print(
+            failure_file.resolve()
+        )
+
+
+if __name__ == "__main__":
+    main()
